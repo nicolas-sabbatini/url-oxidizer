@@ -1,0 +1,8 @@
+- path: /urlshort
+  url: https://github.com/gophercises/urlshort
+- path: /urlshort-final
+  url: https://github.com/gophercises/urlshort/tree/solution
+- path: /rocket
+  url: https://rocket.rs/
+- path: /yaml-doc
+  url: https://github.com/dtolnay/serde-yaml

@@ -1,0 +1,14 @@
+[
+  {
+    "path": "/g",
+    "url": "https://www.google.com/"
+  },
+  {
+    "path": "/w",
+    "url": "https://www.wikipedia.org/"
+  },
+  {
+    "path": "/git",
+    "url": "https://github.com/"
+  }
+]
