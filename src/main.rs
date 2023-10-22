@@ -1,7 +1,9 @@
 #![allow(clippy::no_effect_underscore_binding, clippy::ignored_unit_patterns)]
 use clap::Parser;
+use html_node::{html, text};
 use rocket::{
     error::ErrorKind,
+    http::ContentType,
     request::{self, FromRequest, Outcome, Request},
     response::Redirect,
     Error,
@@ -37,15 +39,23 @@ fn redirect(new_path: RedirectPath) -> Redirect {
 }
 
 #[get("/<path>", rank = 2)]
-fn hi(path: &str) -> String {
-    format!("Hi! From {path}")
+fn hi(path: &str) -> (ContentType, String) {
+    let body = html! { <h1>Hi! From { text!(" {path}") } </h1> };
+    (ContentType::HTML, body.to_string())
 }
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value = "input/url-map.json")]
-    file_path: String,
+    #[arg(short, long)]
+    json_path: Option<String>,
+    #[arg(short, long)]
+    yaml_path: Option<String>,
+}
+
+enum From {
+    Json,
+    Yaml,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,26 +64,45 @@ struct UrlMap {
     url: String,
 }
 
-#[rocket::main]
-async fn main() -> Result<(), Error> {
-    // Get command line arguments
+fn parse_args() -> (String, From) {
     let args = Args::parse();
-    // Load JSON file
-    let file = File::open(args.file_path).map_err(ErrorKind::Io)?;
+    if let Some(path) = args.json_path {
+        return (path, From::Json);
+    }
+    if let Some(path) = args.yaml_path {
+        return (path, From::Yaml);
+    }
+    panic!("Can't parse the arguments");
+}
+
+fn build_url_map_from_path(path: &str, from: &From) -> Result<HashMap<String, String>, Error> {
+    let file = File::open(path).map_err(ErrorKind::Io)?;
     let reader = BufReader::new(file);
-    // Deserialize JSON
-    let deserialized_json: Vec<UrlMap> = serde_json::from_reader(reader).map_err(|_| {
-        ErrorKind::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Can't open the JSON file",
-        ))
-    })?;
-    // Convert to HashMap
-    let url_map = deserialized_json
+    let deserialized: Vec<UrlMap> = match from {
+        From::Json => serde_json::from_reader(reader).map_err(|_| {
+            ErrorKind::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Can't open the JSON file",
+            ))
+        })?,
+        From::Yaml => serde_yaml::from_reader(reader).map_err(|_| {
+            ErrorKind::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Can't open the YAML file",
+            ))
+        })?,
+    };
+    let url_map = deserialized
         .iter()
         .map(|url_map| (url_map.path.clone(), url_map.url.clone()))
         .collect::<HashMap<String, String>>();
+    Ok(url_map)
+}
 
+#[rocket::main]
+async fn main() -> Result<(), Error> {
+    let (path, from) = parse_args();
+    let url_map = build_url_map_from_path(&path, &from)?;
     rocket::build()
         .mount("/", routes![hi, redirect])
         .manage(url_map)
